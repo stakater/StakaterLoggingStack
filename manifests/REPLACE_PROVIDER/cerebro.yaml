@@ -11,7 +11,7 @@ spec:
     version: 1.0.1
   values:
     config:
-      secret: "ki:s:[[@=Ag?QIW2jMwkY:eqvrJ]JqoJyi2axj3ZvOv^/KavOT4ViJSv?6YY4[N"
+      secret: ""
       hosts: 
         - host: "http://elasticsearch-stakater-logging-es-cluster.logging:9200"
           name: "elasticsearch-stakater-logging-elasticsearch-cluster"
