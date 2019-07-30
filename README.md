@@ -16,15 +16,7 @@ cd manifests
 ```
 kubectl apply -f . -n logging
 ```
-4. After this command is executed successfully switch directory to `aws` if you want to deploy on Aamazon Web Services (AWS) or `azure` if you want to deploy on Microsoft Azure Cloud Platform.
-```
-cd [aws|azure]/
-```
-6. Run the following command
-```
-kubectl apply -f . -n logging
-```
-7. It will take 3-4 minutes for kubernetes to completely reflect all the changes on the dasboard.
+5. It will take 3-4 minutes for kubernetes to completely reflect all the changes on the dasboard.
 
 # Variables to replace
 REPLACE_PROVIDER: azure,aws,ibm etc.
