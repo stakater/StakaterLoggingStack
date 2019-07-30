@@ -19,7 +19,6 @@ kubectl apply -f . -n logging
 5. It will take 3-4 minutes for kubernetes to completely reflect all the changes on the dasboard.
 
 # Variables to replace
-REPLACE_PROVIDER: azure,aws,ibm etc.
 REPLACE_DOMAIN_NAME: Domain name to expose applications e.g stakater.com.
 REPLACE_NAMESPACE: Namespace to deploy in Kubernetes
 REPLACE_STORAGE_TYPE: `gp2` for AWS, `Standard_LRS` for Azure

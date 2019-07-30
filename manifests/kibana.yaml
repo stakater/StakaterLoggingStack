@@ -23,7 +23,7 @@ spec:
         authproxy.stakater.com/enabled: "true"
         authproxy.stakater.com/upstream-url: "http://127.0.0.1:5601"
         authproxy.stakater.com/source-service-name: stakater-logging-kibana
-        authproxy.stakater.com/redirection-url: "https://kibana.logging.REPLACE_DOMAIN_NAME"
+        authproxy.stakater.com/redirection-url: "https://kibana.REPLACE_NAMESPACE.REPLACE_DOMAIN_NAME"
         authproxy.stakater.com/listen: "0.0.0.0:80"
     service:
       externalPort: 80

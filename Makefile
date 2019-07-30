@@ -2,7 +2,6 @@
 SHELL := /bin/bash
 NAMESPACE ?= logging
 FOLDER_NAME ?= manifests
-PROVIDER_NAME ?= aws
 
 install:
 	kubectl create namespace $(NAMESPACE) || true
