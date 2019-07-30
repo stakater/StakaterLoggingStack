@@ -1,0 +1,86 @@
+apiVersion: konfigurator.stakater.com/v1alpha1
+kind: KonfiguratorTemplate
+metadata:
+  labels:
+    app: konfigurator
+  name: fluentd
+spec:
+  renderTarget: ConfigMap
+  app:
+    name: stakater-logging-fluentd-elasticsearch
+    kind: DaemonSet
+    volumeMounts:
+    - mountPath: /etc/fluent
+      container: stakater-logging-fluentd-elasticsearch
+  templates:
+    fluent.conf: "# Do not collect fluentd's own logs to avoid infinite loops.\n<match
+      fluent.**>\n    @type null\n</match>\n\n@include /etc/fluent/config.d/*.conf        \n\n<match
+      kubernetes.var.log.containers.**fluentd**.log>\n    @type null\n</match>      \n\n<filter
+      kubernetes.var.log.containers.**.log>\n    @type kubernetes_metadata\n</filter>\n\n#
+      Workaround until fluent-slack-plugin adds support for nested values\n<filter kubernetes.var.log.containers.**.log>\n
+      \   @type record_transformer\n    enable_ruby\n    <record>\n        kubernetes_pod_name
+      ${record[\"kubernetes\"][\"pod_name\"]}\n        kubernetes_namespace_name ${record[\"kubernetes\"][\"namespace_name\"]}\n
+      \   </record>\n</filter>\n\n# Get distinct pods per application\n{{- $podsWithAnnotations
+      := whereExist .Pods \"ObjectMeta.Annotations.fluentdConfiguration\" -}}\n{{- $distinctPods
+      := distinctPodsByOwner $podsWithAnnotations -}}\n\n# Create concat filters for supporting
+      multiline\n{{- range $pod := $distinctPods -}}\n    {{- $config := first (parseJson
+      $pod.ObjectMeta.Annotations.fluentdConfiguration) }}\n\n    {{- range $containerConfig
+      := $config.containers }}\n        {{- if (len $pod.Spec.Containers) eq 1 }}\n<filter
+      kubernetes.var.log.containers.{{ (index $pod.ObjectMeta.OwnerReferences 0).Name
+      }}**_{{ $pod.ObjectMeta.Namespace }}_{{ (index $pod.Spec.Containers 0).Name }}**.log>\n
+      \       {{- else }}\n<filter kubernetes.var.log.containers.{{ (index $pod.ObjectMeta.OwnerReferences
+      0).Name }}**_{{ $pod.ObjectMeta.Namespace }}_{{ $containerConfig.containerName }}**.log>\n
+      \       {{- end }}\n    @type concat\n    key log\n    multiline_start_regexp {{
+      $containerConfig.expressionFirstLine }}\n    flush_interval 5s\n    timeout_label
+      @LOGS\n</filter>\n    {{- end }}\n{{- end }}\n\n# Relabel all logs to ensure timeout
+      logs are treated as normal logs and not ignored\n<match **>\n    @type relabel\n
+      \   @label @LOGS\n</match>\n\n<label @LOGS>\n    # Create regexp filters for parsing
+      internal logs of applications\n    {{- range $pod := $distinctPods -}}\n        {{-
+      $config := first (parseJson $pod.ObjectMeta.Annotations.fluentdConfiguration) }}\n\n
+      \       {{- range $containerConfig := $config.containers }}\n            {{- if
+      (len $pod.Spec.Containers) eq 1 }}\n    <filter kubernetes.var.log.containers.{{
+      (index $pod.ObjectMeta.OwnerReferences 0).Name }}**_{{ $pod.ObjectMeta.Namespace
+      }}_{{ (index $pod.Spec.Containers 0).Name }}**.log>\n            {{- else }}\n    <filter
+      kubernetes.var.log.containers.{{ (index $pod.ObjectMeta.OwnerReferences 0).Name
+      }}**_{{ $pod.ObjectMeta.Namespace }}_{{ $containerConfig.containerName }}**.log>\n
+      \           {{- end }}\n        @type parser\n        key_name log\n        reserve_data
+      true\n        <parse>\n            @type regexp\n            expression {{ $containerConfig.expression
+      }}\n            time_format {{ $containerConfig.timeFormat }}\n        </parse>\n
+      \   </filter>\n        {{- end }}\n    {{- end }}\n    \n    # Concatenate multi-line
+      logs (>=16KB)\n    <filter kubernetes.var.log.containers.**>\n        @type concat\n
+      \       key log\n        multiline_end_regexp /\\n$/\n        separator \"\"\n    </filter>\n\n
+      \   # Send parsed logs to both output and notification labels\n    <match **>\n
+      \       @type copy\n        deep_copy true\n        # If one store raises an error,
+      it ignores other stores. So adding `ignore_error` ensures that the log will be sent
+      to all stores regardless of the error \n        <store ignore_error>\n            @type
+      relabel\n            @label @NOTIFICATION\n        </store>\n        <store ignore_error>\n
+      \           @type relabel\n            @label @OUTPUT\n        </store>\n    </match>\n\n</label>\n\n<label
+      @OUTPUT>\n    # Send logs to Elasticsearch          \n    <match **>\n        @id
+      elasticsearch\n        @type elasticsearch\n        @log_level info\n        include_tag_key
+      true\n        type_name _doc\n        host \"#{ENV['OUTPUT_HOST']}\"\n        port
+      \"#{ENV['OUTPUT_PORT']}\"\n        scheme \"#{ENV['OUTPUT_SCHEME']}\"\n        ssl_version
+      \"#{ENV['OUTPUT_SSL_VERSION']}\"              \n        ssl_verify false\n        logstash_prefix
+      \"#{ENV['LOGSTASH_PREFIX']}\"\n        logstash_format true\n        flush_interval
+      30s\n        # Never wait longer than 5 minutes between retries.\n        max_retry_wait
+      60\n        # Disable the limit on the number of retries (retry forever).\n        disable_retry_limit\n
+      \       time_key timestamp\n        reload_connections false\n    </match>\n</label>
+      \     \n<label @NOTIFICATION>\n    # Filter ERROR level logs\n    <filter **>\n
+      \       @type grep\n        <regexp>\n            key level\n            pattern
+      (ERROR|error|Error|^E[0-9]{4})\n        </regexp>\n    </filter>\n  {{- if (len
+      $distinctPods) ge 1 }}\n  {{- range $pod := $distinctPods -}}\n    {{- $config :=
+      first (parseJson $pod.ObjectMeta.Annotations.fluentdConfiguration) }} \n    # Create
+      slack notification matchers for sending error notifications per app\n    <match
+      kubernetes.var.log.containers.{{ (index $pod.ObjectMeta.OwnerReferences 0).Name
+      }}**_{{ $pod.ObjectMeta.Namespace }}_**.log>\n      {{- if $config.notifications.slack
+      }}\n        @type copy\n        <store ignore_error>\n            @type slack\n
+      \           webhook_url {{ $config.notifications.slack.webhookURL }}\n            channel
+      {{ $config.notifications.slack.channelName }}\n            username fluentd\n            icon_url
+      https://raw.githubusercontent.com/fluent/fluentd-docs/master/public/logo/Fluentd_square.png\n
+      \           flush_interval 15s\n            parse full\n            color danger\n
+      \           link_names false\n            title_keys level\n            title %s
+      log\n            message_keys level,timestamp,kubernetes_pod_name,kubernetes_namespace_name,message\n
+      \           message *Level* %s *Time* %s *Pod* %s *Namespace* %s *Message* %s\n
+      \           time_key timestamp\n        </store>\n      {{- else }}\n          #
+      notifications\n        @type null\n      {{- end }} \n    </match>              \n
+      \ {{- end }}\n  {{- else }}\n  <match app.**>\n      # distinctPods\n    @type null
+      \           \n  </match>\n  {{- end }}  \n</label>"
