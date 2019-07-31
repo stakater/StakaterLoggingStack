@@ -20,11 +20,17 @@ kubectl apply -f . -n logging
 
 # Variables to replace
 REPLACE_DOMAIN_NAME: Domain name to expose applications e.g stakater.com.
+
 REPLACE_NAMESPACE: Namespace to deploy in Kubernetes
+
 REPLACE_STORAGE_TYPE: `gp2` for AWS, `Standard_LRS` for Azure
+
 REPLACE_BASE64_CA_CERT_STRING: base64 string for ca.crt for sealed secrets
+
 REPLACE_BASE64_TLS_CERT_STRING: base64 string for tls.crt for sealed secrets
+
 REPLACE_BASE64_TLS_KEY_STRING: base64 string for tls.key for sealed secrets
+
 REPLACE_PROVISIONER: `aws-ebs` for AWS, `azure-disk` for Azure
 
 ## Changes For Azure
